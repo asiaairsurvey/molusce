@@ -1,4 +1,0 @@
-molusce
-=======
-
-Quantum GIS plug-in MOLUSCE (Modules for Land Use Change Simulations)
