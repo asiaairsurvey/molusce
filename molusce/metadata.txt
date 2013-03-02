@@ -1,24 +1,20 @@
-; the next section is mandatory
 [general]
-name=Molusce
-qgisMinimumVersion=1.8
-description=Modules for Land Use Change Evaluation
+name=MOLUSCE
+description=Modules for Land Use Change Simulations
 category=Raster
-version=version 2.0j
-; end of mandatory metadata
-homepage=
-repository=http://pyqgis.org/repo/contributed
-changelog = from version 2.0a
-    2.0a Public experimental release 29-Oct-2012
-    2.0b ANN improved input scaling, training algorithm
-    2.0c LR model neighborhood zones now equivalent to ANN model
-    2.0d Simulation module made compatible with new neighborhood algorithm
-    2.0e Clean up debug code, timer after completion 2.0d testing, mods
-    2.0f Corrected calculation of neighborhood inputs in simulation, testing...
-    2.0g new n'hood routine replaces similar code blocks at 4 locations, testing..
-    2.0h revised image compatibility tests, fix regex error when filename is null ...
-    2.0i added trapping of exceptions in graph.scale
-    2.0j tr() wrapper added to all strings requiring translation
+version=0.0.1
+qgisMinimumVersion=1.9.0
+
+author=NextGIS
+email=info@nextgis.org
+
+icon=icons/molusce.png
+
+tags=raster,land use planning
+
+homepage=http://hub.qgis.org/projects/molusce
+tracker=http://hub.qgis.org/projects/molusce/issues
+repository=https://github.com/asiaairsurvey/molusce
+
 experimental=True
-author=Asia Air Survey Co. Ltd
-email=mto.gismondi@ajiko.co.jp
+deprecated=False

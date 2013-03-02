@@ -25,30 +25,30 @@
 #
 #******************************************************************************
 
-def name():
-  return "MOLUSCE"
+from PyQt4.QtCore import *
+from PyQt4.QtGui import *
 
-def description():
-  return "Modules for Land Use Change Simulations"
+class MolusceTableWidget(QTableWidget):
+  def __init__(self, parent=None):
+    QTableWidget.__init__(self, parent)
 
-def category():
-  return "Raster"
+  def keyPressEvent(self, e):
+    if (e.modifiers() == Qt.ControlModifier or e.modifiers() == Qt.MetaModifier) and e.key() == Qt.Key_C:
+      data = QString()
 
-def version():
-  return "0.0.1"
+      # table header
+      for i in xrange(0, self.columnCount()):
+        data += self.horizontalHeaderItem(i).text() + "\t"
+      data += "\n"
 
-def qgisMinimumVersion():
-  return "1.9.0"
+      # table contents
+      for r in xrange(0, self.rowCount()):
+        for c in xrange(0, self.columnCount()):
+          data += self.item(r, c).text() + "\t"
+        data += "\n"
 
-def author():
-  return "NextGIS"
-
-def email():
-  return "info@nextgis.org"
-
-def icon():
-  return "icons/molusce.png"
-
-def classFactory(iface):
-  from molusce import MoluscePlugin
-  return MoluscePlugin(iface)
+      if not data.isEmpty():
+        clipBoard = QApplication.clipboard()
+        clipBoard.setText(data)
+    else:
+      QTableWidget.keyPressEvent(self, e)
