@@ -25,30 +25,31 @@
 #
 #******************************************************************************
 
-def name():
-  return "MOLUSCE"
+from PyQt4.QtCore import *
+from PyQt4.QtGui import *
 
-def description():
-  return "Modules for Land Use Change Simulations"
+from qgis.core import *
 
-def category():
-  return "Raster"
+#from algorithms.models.lr.lr import LR
 
-def version():
-  return "0.0.1"
+from ui.ui_logisticregressionwidgetbase import Ui_Widget
 
-def qgisMinimumVersion():
-  return "1.9.0"
+class LogisticRegressionWidget(QWidget, Ui_Widget):
+  def __init__(self, plugin, parent=None):
+    QWidget.__init__(self, parent)
+    self.setupUi(self)
 
-def author():
-  return "NextGIS"
+    self.plugin = plugin
+    self.inputs = plugin.inputs
 
-def email():
-  return "info@nextgis.org"
+    self.btnFitModel.clicked.connect(self.fitModel)
 
-def icon():
-  return "icons/molusce.png"
+    self.manageGui()
 
-def classFactory(iface):
-  from molusce import MoluscePlugin
-  return MoluscePlugin(iface)
+  def manageGui(self):
+    settings = QSettings("NextGIS", "MOLUSCE")
+
+    self.spnNeighbourhood.setValue(settings.value("ui/LR/neighborhood", 1).toInt()[0])
+
+  def fitModel(self):
+    pass
