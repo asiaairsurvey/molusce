@@ -6,7 +6,7 @@ from osgeo import osr
 import numpy as np
 from numpy import ma as ma
 
-from utils import reclass
+from utils import binaryzation, reclass, get_gradations
 
 class ProviderError(Exception):
     '''Base class for exceptions in this module.'''
@@ -44,28 +44,35 @@ class Raster(object):
         self.bands    = None     # List of the bands (stored as numpy mask array)
         self.geodata  = None     # Georeferensing information
         self.stat     = None     # Initial (before normalizing) statistic (means and stds) of the bands
-        self.isNormalazed = None # Is the bands of the raster normalized?
+        self.isNormalazed = None # Is the bands of the raster normalized? It contains the mode of normalization.
         if self.filename: self._read()
 
     def binaryzation(self, trueVals, bandNum):
         '''Reclass band bandNum to true/false mode. Set true for pixels from trueVals.'''
         r = self.getBand(bandNum)
-        r = reclass(r, trueVals)
+        r = binaryzation(r, trueVals)
         self.setBand(r, bandNum)
 
     def create(self, bands, geodata):
         self.bands = bands
         self.geodata = geodata
-        
+
     def denormalize(self):
         '''
         Denormalisation (see self.normalize)
         '''
+
         if self.isNormalazed:
+            mode = self.isNormalazed
             bandcount = self.getBandsCount()
             for i in range(1, bandcount+1):
                 stat = self.stat[i-1]
-                newBand = self.getBand(i)*stat['std'] + stat['mean']
+                if mode == 'mean':
+                    newBand = 1.0*self.getBand(i)*stat['std'] + stat['mean']
+                elif mode == 'maxmin':
+                    newBand = 1.0*self.getBand(i)*(stat['max'] - stat['min']) - stat['min']
+                else:
+                    raise ProviderError('The normalization mode is unknown!')
                 self.setBand(newBand, i)
             self.isNormalazed = False
 
@@ -111,7 +118,7 @@ class Raster(object):
         return self.bands[bandNo-1]
 
     def getBandsCount(self):
-        if self.bands:
+        if self.bands != None:
             return len(self.bands)
         else:
             return 0
@@ -121,9 +128,12 @@ class Raster(object):
         Return mean and std of the raster's band
         '''
         band = self.getBand(bandNo)
-        result = np.zeros(1, dtype=[('mean', float, 1),('std',  float, 1)])
+        result = {}
         result['mean'] = np.mean(band)
         result['std']  = np.std (band)
+        result['min']  = np.min (band)
+        result['max']  = np.max (band)
+        result['gradation'] = get_gradations(band.compressed())
         return result
 
 
@@ -178,21 +188,92 @@ class Raster(object):
         Return true if projection of the raster uses metric units
         '''
         return self.getProjUnits() in ('metre', 'Meter')
-        
-    def normalize(self):
+
+    def normalize(self, mode='mean'):
         '''
         Linear normalization of the bands: new = (old-mean(old)/std(old))
+
+        @param mode     Type of normalization:
+                mean    new = (old-mean(old)/std(old))
+                maxmin  new = (old-min(old)/(max(old)-min(old))
         '''
-        if not self.isNormalazed:
+
+
+
+        if self.isNormalazed != mode:
+            self.denormalize()          # Reset raster values to initail
             bandcount = self.getBandsCount()
             self.stat = []
             for i in range(1, bandcount+1):
                 stat = self.getBandStat(i)
                 self.stat.append(stat)
-                newBand = (self.getBand(i) - stat['mean'])/stat['std']
+                if mode == 'mean':
+                    newBand = 1.0*(self.getBand(i) - stat['mean'])/stat['std']
+                elif mode == 'maxmin':
+                    newBand = 1.0*(self.getBand(i) - stat['min'])/(stat['max'] - stat['min'])
+                else:
+                    raise ProviderError('The normalization mode is unknown!')
                 self.setBand(newBand, i)
-            self.isNormalazed = True
+            self.isNormalazed = mode
 
+    def _read(self):
+        data = gdal.Open( self.filename )
+        if data is None:
+            raise ProviderError("Can't read the file '%s'" % self.filename)
+
+        self.geodata = {}
+        self.geodata['xSize'] = data.RasterXSize
+        self.geodata['ySize'] = data.RasterYSize
+        self.geodata['proj']  = data.GetProjection()
+        self.geodata['transform']  = data.GetGeoTransform()
+
+        # Get units of the projection
+        sr = osr.SpatialReference()
+        sr.ImportFromWkt(self.geodata['proj'])
+        self.geodata['units'] = sr.GetLinearUnitsName()
+
+        self.bands = []
+        for i in range(1, data.RasterCount+1):
+            r = data.GetRasterBand(i)
+            nodataValue =  r.GetNoDataValue()
+            r = r.ReadAsArray()
+            if nodataValue:
+                mask = binaryzation(r, [nodataValue])
+                r = ma.array(data = r, mask=mask)
+            self.bands.append(r)
+        self.resetMask()
+        self.isNormalazed = False
+
+
+    def resetMask(self, maskVals = None):
+        '''
+        Set mask of _ALL_ bands.  maskVals is a list of masked values.
+        '''
+        if not maskVals: maskVals = []
+
+        for i in range(self.getBandsCount()):
+            r = self.getBand(i)
+            mask = binaryzation(r, maskVals)
+            r = ma.array(data = r, mask=mask)
+            self.setBand(r, i)
+
+    def reclass(self, bins, bandNum):
+        '''Reclass band bandNum to new categories.
+        @param bins     List of bins (category bounds):
+                Interval         ->   New Class Number
+                [bin[0], bin[1]) ->     1
+                [bin[1], bin[2]) ->     2
+                ...
+                [bin[n-1], bin[n]) ->   n
+        '''
+        tmp = bins[:]
+        tmp.sort()
+        if x!=tmp:
+            raise ProviderError('Reclassification error: bins must be sorted!')
+
+        r = self.getBand(bandNum)
+        r = reclass(r, bins)
+        self.setBand(r, bandNum)
 
     def save(self, filename, format="GTiff", rastertype=None, nodata=0):
         driver = gdal.GetDriverByName(format)
@@ -229,46 +310,6 @@ class Raster(object):
 
         self.geodata = geodata
 
-
-    def resetMask(self, maskVals = None):
-        '''
-        Set mask of _ALL_ bands.  maskVals is a list of masked values.
-        '''
-        if not maskVals: maskVals = []
-
-        for i in range(self.getBandsCount()):
-            r = self.getBand(i)
-            mask = reclass(r, maskVals)
-            r = ma.array(data = r, mask=mask)
-            self.setBand(r, i)
-
-    def _read(self):
-        data = gdal.Open( self.filename )
-        if data is None:
-            raise ProviderError("Can't read the file '%s'" % self.filename)
-
-        self.geodata = {}
-        self.geodata['xSize'] = data.RasterXSize
-        self.geodata['ySize'] = data.RasterYSize
-        self.geodata['proj']  = data.GetProjection()
-        self.geodata['transform']  = data.GetGeoTransform()
-        
-        # Get units of the projection
-        sr = osr.SpatialReference()
-        sr.ImportFromWkt(self.geodata['proj'])
-        self.geodata['units'] = sr.GetLinearUnitsName()
-
-        self.bands = []
-        for i in range(1, data.RasterCount+1):
-            r = data.GetRasterBand(i)
-            nodataValue =  r.GetNoDataValue()
-            r = r.ReadAsArray()
-            if nodataValue:
-                mask = reclass(r, [nodataValue])
-                r = ma.array(data = r, mask=mask)
-            self.bands.append(r)
-        self.resetMask()
-        self.isNormalazed = False
 
 
 

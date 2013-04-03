@@ -2,11 +2,15 @@
 
 import numpy as np
 from numpy import ma as ma
+from collections import namedtuple
 
-from molusce.algorithms.utils import reclass, get_gradations
+
+from molusce.algorithms.utils import binaryzation, get_gradations
 
 
 EPSILON = 4*np.finfo(np.float).eps # Small number > 0
+
+Weights = namedtuple('Weights', ['wPlus', 'wMinus'])
 
 
 class WoeError(Exception):
@@ -14,7 +18,7 @@ class WoeError(Exception):
     def __init__(self, msg):
         self.msg = msg
 
-def binary_woe(factor, sites, unitcell=1):
+def _binary_woe(factor, sites, unitcell=1):
     '''
     Weight of evidence method (binary form).
     
@@ -47,7 +51,7 @@ def binary_woe(factor, sites, unitcell=1):
     # Count of sites inside area where the factor occurs:
     siteAndPatten = fm&sm       # Sites inside area where the factor occurs
     Nb = 1.0 * len(siteAndPatten[siteAndPatten==True]) # Count of sites inside factor area 
-    
+
     # Check areas size
     if A == 0:
         raise WoeError('Unmasked area is zero-size!')
@@ -73,33 +77,49 @@ def binary_woe(factor, sites, unitcell=1):
     wPlus  = np.math.log(pSiteFactor/pNonSiteFactor)
     wMinus = np.math.log(pSiteNonFactor/pNonSiteNonFactor)
 
-    return (wPlus, wMinus)
+    return Weights(wPlus, wMinus)
     
 def woe(factor, sites, unit_cell=1):
     '''Weight of evidence method (multiclass form).
     
-    @param factor     Multiclass pattern raster used for prediction of point objects (sites).
-    @param sites      Raster layer consisting of the locations at which the point objects are known to occur.
+    @param factor     Multiclass pattern array used for prediction of point objects (sites).
+    @param sites      Array layer consisting of the locations at which the point objects are known to occur.
     @param unit_cell  Method parameter, pixelsize of resampled rasters.
     
-    @return [(W+, W-), ...]  Tuples of the factor's weights (w+, w-).
+    @return [wMap1, wMap2, ...]   Total weights of each factor.
     '''
-       
+    
+    result =np.zeros(ma.shape(factor))
     # Get list of classes from the factor raster
     classes = get_gradations(factor.compressed())
+
+    # Try to binarize sites:
+    sClasses = get_gradations(sites.compressed())
+    if len(sClasses) != 2:
+        raise WoeError('Site raster must be binary!')
+    sites = binaryzation(sites, [sClasses[1]])
     
     weights = [] # list of the weights of evidence
-    if len(classes) > 2:
-        # Loop over classes if the factor raster is not binary
+    if len(classes) >= 2:
         for cl in classes:
-            fct = reclass(factor, [cl])
-            weights.append(binary_woe(fct, sites, unit_cell))
-    elif len(classes) == 2:
-        weights.append(binary_woe(factor, sites, unit_cell))
+            fct = binaryzation(factor, [cl])
+            weights.append(_binary_woe(fct, sites, unit_cell))
     else:
         raise WoeError('Wrong count of classes in the factor raster!') 
     
-    return weights
+    wTotalMin = sum([w[1] for w in weights])
+    wMap = [w[0] + wTotalMin - w[1] for w in weights]
+    
+    # If len(classes) = 2, then [w[0] + wTotalMin - w[1] for w in weights] increases the answer.
+    # In this case:
+    if len(classes) == 2:
+        wMap = [w/2 for w in wMap]
+    
+    for i,cl in enumerate(classes):
+        result[factor==cl] = wMap[i]
+    
+    result = ma.array(data=result, mask=factor.mask)
+    return result
     
     
 def contrast(wPlus, wMinus):

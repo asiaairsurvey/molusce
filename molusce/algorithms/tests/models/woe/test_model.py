@@ -9,7 +9,7 @@ import numpy as np
 from numpy import ma as ma
 
 
-from molusce.algorithms.models.woe.model import WoeError, binary_woe, woe, EPSILON
+from molusce.algorithms.models.woe.model import WoeError, _binary_woe, woe, EPSILON
 
 
 class TestModel (unittest.TestCase):
@@ -42,12 +42,12 @@ class TestModel (unittest.TestCase):
             [None,  False, False,]
         ]
         
-        mask = [
+        self.mask = [
             [False, False, False,],
             [False, False, False,],
             [True,  False, False,]
         ]
-        mask1 = [
+        self.mask1 = [
             [False, False, False,],
             [False, False, False,],
             [False,  False, False,]
@@ -70,45 +70,47 @@ class TestModel (unittest.TestCase):
             [None,  False, False, None,  True,  True, ],
             [False, False, True,  None,  False, False,]
         ]
-        bigmask = [
+        self.bigmask = [
             [False, False, False, False, False, False,],
             [False, False, False, False, False, False,],
             [True,  False, False, True,  False, False, ],
             [False, False, False, True,  False, False,]
         ]
         
-        self.factor     = ma.array(data = fact,      mask=mask,     dtype=np.bool)
-        self.fact1      = ma.array(data = fact,      mask=mask1,    dtype=np.bool)
-        self.multifact  = ma.array(data = multifact, mask=mask,     dtype=np.int)
-        self.sites      = ma.array(data = site,      mask=mask,     dtype=np.bool)
-        self.sites1     = ma.array(data = site1,     mask=mask1,    dtype=np.int)
-        self.sites2     = ma.array(data = site1,     mask=mask,     dtype=np.int)
-        self.zero       = ma.array(data = zero,      mask=mask,     dtype=np.bool)
-        self.bigfactor  = ma.array(data = bigfact,   mask=bigmask,  dtype=np.bool)
-        self.bigsite    = ma.array(data = bigsite,   mask=bigmask,  dtype=np.bool)
+        self.factor     = ma.array(data = fact,      mask=self.mask,     dtype=np.bool)
+        self.fact1      = ma.array(data = fact,      mask=self.mask1,    dtype=np.bool)
+        self.multifact  = ma.array(data = multifact, mask=self.mask,     dtype=np.int)
+        self.sites      = ma.array(data = site,      mask=self.mask,     dtype=np.bool)
+        self.sites1     = ma.array(data = site1,     mask=self.mask1,    dtype=np.int)
+        self.sites2     = ma.array(data = site1,     mask=self.mask,     dtype=np.int)
+        self.zero       = ma.array(data = zero,      mask=self.mask,     dtype=np.bool)
+        self.bigfactor  = ma.array(data = bigfact,   mask=self.bigmask,  dtype=np.bool)
+        self.bigsite    = ma.array(data = bigsite,   mask=self.bigmask,  dtype=np.bool)
     
     def test_binary_woe(self):
         wPlus  = np.math.log ( (2.0/3 + EPSILON)/(2.0/5 + EPSILON) ) 
         wMinus = np.math.log ( (1.0/3 + EPSILON)/(3.0/5 + EPSILON) )        
-        self.assertEqual(binary_woe(self.factor, self.sites), (wPlus, wMinus))
+        self.assertEqual(_binary_woe(self.factor, self.sites), (wPlus, wMinus))
         
         wPlus  = np.math.log ( (5.0/7 + EPSILON)/(0.5/3.5 + EPSILON) ) 
         wMinus = np.math.log ( (2.0/7 + EPSILON)/(3.0/3.5 + EPSILON) ) 
-        self.assertEqual(binary_woe(self.bigfactor, self.bigsite, unitcell=2), (wPlus, wMinus))
+        self.assertEqual(_binary_woe(self.bigfactor, self.bigsite, unitcell=2), (wPlus, wMinus))
         
         # if Sites=Factor:
         wPlus  = np.math.log ( (1 + EPSILON)/EPSILON )
         wMinus = np.math.log ( EPSILON/(1 + EPSILON)  )
-        self.assertEqual(binary_woe(self.factor, self.factor), (wPlus, wMinus))
+        self.assertEqual(_binary_woe(self.factor, self.factor), (wPlus, wMinus))
+
         
         # Check areas size
-        self.assertRaises(WoeError, binary_woe, self.factor, self.zero)
-        self.assertRaises(WoeError, binary_woe, self.zero,   self.sites)
-        self.assertRaises(WoeError, binary_woe, self.bigfactor, self.bigsite, 3)
+        self.assertRaises(WoeError, _binary_woe, self.factor, self.zero)
+        self.assertRaises(WoeError, _binary_woe, self.zero,   self.sites)
+        self.assertRaises(WoeError, _binary_woe, self.bigfactor, self.bigsite, 3)
         
         # Non-binary sites
         self.assertRaises(WoeError, woe, self.fact1, self.sites1)
-        self.assertRaises(WoeError, woe, self.multifact, self.sites2)
+        # Assert does not raises
+        woe(self.multifact, self.sites2)
         
     def test_woe(self):
         wPlus1  = np.math.log ( (2.0/3 + EPSILON)/(2.0/5 + EPSILON) ) 
@@ -121,11 +123,25 @@ class TestModel (unittest.TestCase):
         wMinus3 = np.math.log ( (1.0 + EPSILON)/(2.0/5 + EPSILON) )
         
         # Binary classes
-        self.assertEqual(woe(self.factor, self.sites), [(wPlus1, wMinus1)])
+        ans = [
+            [wPlus1,  wPlus1,  wMinus1,],
+            [wMinus1, wMinus1, wPlus1, ],
+            [None,   wMinus1,  wPlus1, ]
+        ]
+        ans = ma.array(data=ans, mask=self.mask)
+        np.testing.assert_equal(woe(self.factor, self.sites), ans)
         
         # Multiclass
-        weights = woe(self.multifact, self.sites)        
-        self.assertEqual(weights, [(wPlus1, wMinus1), (wPlus2, wMinus2), (wPlus3, wMinus3)])
+        w1, w2, w3 = (wPlus1 + wMinus2+wMinus3), (wPlus2 + wMinus1 + wMinus3), (wPlus3 + wMinus1 + wMinus2)
+        ans = [
+            [w1, w1, w3,],
+            [w3, w2, w1,],
+            [ 0, w3, w1,]
+        ]
+        ans = ma.array(data=ans, mask=self.mask)
+        weights = woe(self.multifact, self.sites)
+        
+        np.testing.assert_equal(ans, weights)
         
         
         
