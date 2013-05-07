@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'ui/logisticregressionwidgetbase.ui'
 #
-# Created: Fri Feb 22 17:12:36 2013
+# Created: Wed Apr  3 14:07:34 2013
 #      by: PyQt4 UI code generator 4.9.1
 #
 # WARNING! All changes made in this file will be lost!
@@ -58,7 +58,7 @@ class Ui_Widget(object):
         self.gridLayout.addWidget(self.leAgreement, 3, 1, 1, 1)
         spacerItem = QtGui.QSpacerItem(20, 40, QtGui.QSizePolicy.Minimum, QtGui.QSizePolicy.Expanding)
         self.gridLayout.addItem(spacerItem, 5, 0, 1, 2)
-        self.tblCoefficients = QtGui.QTableWidget(self.splitter)
+        self.tblCoefficients = MolusceTableWidget(self.splitter)
         self.tblCoefficients.setObjectName(_fromUtf8("tblCoefficients"))
         self.tblCoefficients.setColumnCount(0)
         self.tblCoefficients.setRowCount(0)
@@ -75,3 +75,4 @@ class Ui_Widget(object):
         self.spnNeighbourhood.setSuffix(QtGui.QApplication.translate("Widget", " px", None, QtGui.QApplication.UnicodeUTF8))
         self.label_2.setText(QtGui.QApplication.translate("Widget", "R-squared", None, QtGui.QApplication.UnicodeUTF8))
 
+from molusce.moluscetablewidget import MolusceTableWidget
